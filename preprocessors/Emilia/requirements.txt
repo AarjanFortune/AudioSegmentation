@@ -1,0 +1,9 @@
+librosa
+numpy
+tqdm
+pydub
+pyannote.audio
+pandas
+git+https://github.com/m-bain/whisperx.git # needs torch >= 2.0.0
+yt-dlp[default]
+python-dotenv
