@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import yt_dlp
+from yt_dlp.utils import parse_duration
 
 
 def read_urls(urls_file):
@@ -18,13 +19,19 @@ def read_urls(urls_file):
 
 
 def download_audio(
-    urls, output_dir, cookies_from_browser=None, start_time=None, end_time=None
+    urls,
+    output_dir,
+    cookies_from_browser=None,
+    cookies_file=None,
+    start_time=None,
+    end_time=None,
 ):
     """Download each URL as a 24 kHz mono WAV file."""
     output_dir.mkdir(parents=True, exist_ok=True)
     options = {
         "format": "bestaudio/best",
         "noplaylist": True,
+        "source_address": "0.0.0.0",
         "js_runtimes": {"node": {}},
         "remote_components": ["ejs:github"],
         "outtmpl": str(output_dir / "%(title)s [%(id)s].%(ext)s"),
@@ -39,9 +46,11 @@ def download_audio(
     }
     if cookies_from_browser:
         options["cookiesfrombrowser"] = (cookies_from_browser,)
+    if cookies_file:
+        options["cookiefile"] = str(cookies_file)
     if start_time or end_time:
         options["download_ranges"] = yt_dlp.utils.download_range_func(
-            None, [(start_time or "0", end_time or "inf")]
+            None, [(start_time or 0, end_time or float("inf"))]
         )
         options["force_keyframes_at_cuts"] = True
 
@@ -72,6 +81,11 @@ def main():
         help="Use cookies from this browser when YouTube requires verification",
     )
     parser.add_argument(
+        "--cookies_file",
+        type=Path,
+        help="Netscape-format cookies file exported from a browser",
+    )
+    parser.add_argument(
         "--start_time",
         help="Start time for a partial download, for example 00:10:00",
     )
@@ -83,6 +97,20 @@ def main():
 
     if args.end_time and not args.start_time:
         parser.error("--end_time requires --start_time")
+    if args.cookies_from_browser and args.cookies_file:
+        parser.error("use only one of --cookies_from_browser or --cookies_file")
+
+    try:
+        start_time = parse_duration(args.start_time) if args.start_time else None
+        end_time = parse_duration(args.end_time) if args.end_time else None
+    except (TypeError, ValueError):
+        parser.error("timestamps must use seconds or HH:MM:SS format")
+    if args.start_time and start_time is None:
+        parser.error(f"invalid --start_time value: {args.start_time}")
+    if args.end_time and end_time is None:
+        parser.error(f"invalid --end_time value: {args.end_time}")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        parser.error("--end_time must be greater than --start_time")
 
     urls = list(args.url or [])
     if args.urls_file:
@@ -94,8 +122,9 @@ def main():
         urls,
         args.output_dir,
         args.cookies_from_browser,
-        args.start_time,
-        args.end_time,
+        args.cookies_file,
+        start_time,
+        end_time,
     )
 
     if not args.skip_processing:
