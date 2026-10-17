@@ -17,7 +17,9 @@ def read_urls(urls_file):
     ]
 
 
-def download_audio(urls, output_dir, cookies_from_browser=None):
+def download_audio(
+    urls, output_dir, cookies_from_browser=None, start_time=None, end_time=None
+):
     """Download each URL as a 24 kHz mono WAV file."""
     output_dir.mkdir(parents=True, exist_ok=True)
     options = {
@@ -37,6 +39,11 @@ def download_audio(urls, output_dir, cookies_from_browser=None):
     }
     if cookies_from_browser:
         options["cookiesfrombrowser"] = (cookies_from_browser,)
+    if start_time or end_time:
+        options["download_ranges"] = yt_dlp.utils.download_range_func(
+            None, [(start_time or "0", end_time or "inf")]
+        )
+        options["force_keyframes_at_cuts"] = True
 
     with yt_dlp.YoutubeDL(options) as downloader:
         downloader.download(urls)
@@ -64,7 +71,18 @@ def main():
         choices=("chrome", "edge", "firefox", "safari"),
         help="Use cookies from this browser when YouTube requires verification",
     )
+    parser.add_argument(
+        "--start_time",
+        help="Start time for a partial download, for example 00:10:00",
+    )
+    parser.add_argument(
+        "--end_time",
+        help="End time for a partial download, for example 00:20:00",
+    )
     args = parser.parse_args()
+
+    if args.end_time and not args.start_time:
+        parser.error("--end_time requires --start_time")
 
     urls = list(args.url or [])
     if args.urls_file:
@@ -72,7 +90,13 @@ def main():
     if not urls:
         parser.error("provide --url or --urls_file")
 
-    download_audio(urls, args.output_dir, args.cookies_from_browser)
+    download_audio(
+        urls,
+        args.output_dir,
+        args.cookies_from_browser,
+        args.start_time,
+        args.end_time,
+    )
 
     if not args.skip_processing:
         repo_root = Path(__file__).resolve().parents[2]
